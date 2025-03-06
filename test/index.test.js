@@ -8,8 +8,7 @@ import CouchRepository from '../lib/core/CouchRepository';
 import DataMapperEntity from '../lib/core/DataMapperEntity';
 import ActiveRecordEntity from '../lib/core/ActiveRecordEntity';
 import DataSource from '../lib/core/DataSource';
-
-
+import createActiveRecordEntity from '../lib/core/CreateActiveRecordEntity'
 
 
 /* jest.mock('nano', () => jest.fn(() => ({
@@ -62,44 +61,45 @@ const schema = {
 const fieldMap = {
     name: 'name_field',
     city: 'address.city',
-    type: 'doctype'
+    type: 'doctype',
+    age: 'age'
 };
 
 
 
 describe('NoSQLax Testing Suite', () => {
 
-    class TestEntity extends ActiveRecordEntity {
+    const dataSource = new DataSource({
+        url: 'http://localhost:5984',
+        database: 'test-db',
+    });
 
-        static type = 'TestEntity';
-
-        static schemaOrSchemaId = schema;
-
-        static fieldMap = fieldMap
-
-        name;
-        age;
-        city;
-
-        constructor(data) {
-            super(data);
-            this.name = data.name;
-            this.age = data.age;
-            this.city = data.city;
+    // Creating the entity class with mandatory `schemaOrSchemaId`, and `dataSource`
+    const TestEntity = createActiveRecordEntity(
+        "TestEntity",
+        "TestEntity",
+        schema,
+        dataSource,
+        {
+        fieldMap: fieldMap, 
+        ajvOptions: { }, 
+        methods: { // methods
+            async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+                return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
+            }
         }
+    });
 
-        static async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
-        }
-
-        static async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+    // Now you can call the `extend` method to add more methods dynamically
+    TestEntity.extend({
+        async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
             return await this.findMany({ "$and": [{ "$or": [{ name: { $eq: name } }] }, { "$not": { age: { $lt: age } } }], city: { $beginsWith: city } })
-        }
+        },
 
-        static async getViewA(options) {
+        async getViewA(options) {
             return await this.dataSource.connection.view('design', 'view', options)
         }
-    };
+    });
 
     class TestEntitySchemaId extends ActiveRecordEntity {
 
@@ -231,13 +231,9 @@ describe('NoSQLax Testing Suite', () => {
 
     }
 
-    const dataSource = new DataSource({
-        url: 'http://localhost:5984',
-        database: 'test-db',
-    });
 
-    // Attach the datasource to User
-    TestEntity.attachDataSource(dataSource, {});
+
+    // Attach the datasource to test entity
     TestEntitySchemaId.attachDataSource(dataSource, {
         schemas: [schema],
         allErrors: true
