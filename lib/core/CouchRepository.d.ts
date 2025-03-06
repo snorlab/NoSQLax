@@ -10,11 +10,12 @@ type EntityClass = {
     [key: string]: any;
 };
 declare abstract class CouchRepository {
-    private dataSource;
+    private _dataSource;
     private validator;
     private entityClass;
     private fieldMap;
     constructor(ds: DataSource, ajvOptions: any, entityClass: EntityClass);
+    get dataSource(): DataSource;
     find(id: string): Promise<BaseEntity>;
     findOne(selector: MangoSelector, options?: MangoOptions): Promise<BaseEntity>;
     findMany(selector: MangoSelector, options?: MangoOptions): Promise<BaseEntity[]>;

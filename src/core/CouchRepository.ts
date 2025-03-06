@@ -174,7 +174,7 @@ const findUsingMango = async function (selector: Nano.MangoSelector = {}, option
 
 abstract class CouchRepository {
 
-  private dataSource: DataSource; // Type from nano library
+  private _dataSource: DataSource; // Type from nano library
   private validator: Validation;
   private entityClass: EntityClass;
   private fieldMap: Record<string, string>;
@@ -185,7 +185,7 @@ abstract class CouchRepository {
       throw new Error(`entityClass must extend ActiveRecordEntity or DataMapperEntity`);
     }
 
-    this.dataSource = ds;
+    this._dataSource = ds;
     this.entityClass = entityClass;
     this.validator = new Validation(ajvOptions, this.entityClass.schemaOrSchemaId);
 
@@ -202,6 +202,10 @@ abstract class CouchRepository {
 
   }
 
+  get dataSource() {
+    return this._dataSource;
+  }
+
   // 1. Find a document by its ID
   async find(id: string): Promise<BaseEntity> {
     try {
@@ -216,7 +220,6 @@ abstract class CouchRepository {
       throw err;
     }
   }
-
 
 
   // 2. Find one document using a Mango selector
@@ -268,48 +271,48 @@ abstract class CouchRepository {
 
   async save(data: BaseEntity): Promise<BaseEntity> {
     try {
-        if (!(data instanceof this.entityClass)) {
-            throw new Error(`Data must be an instance of ${this.entityClass.name}`);
+      if (!(data instanceof this.entityClass)) {
+        throw new Error(`Data must be an instance of ${this.entityClass.name}`);
+      }
+
+      let existingDoc: any = null;
+
+      // Check if this is an update (document exists)
+      if (data.id) {
+        try {
+          existingDoc = await this.find(data.id);
+        } catch (error) {
+          if (!(error instanceof DocumentNotFoundError)) {
+            throw error; // Only suppress "not found" errors
+          }
         }
+      }
 
-        let existingDoc: any = null;
+      // Merge existing data with new data
+      const transformedData = transformToDocumentFormat(
+        { ...existingDoc, ...data },
+        this.entityClass,
+        this.fieldMap
+      );
 
-        // Check if this is an update (document exists)
-        if (data.id) {
-            try {
-                existingDoc = await this.find(data.id);
-            } catch (error) {
-                if (!(error instanceof DocumentNotFoundError)) {
-                    throw error; // Only suppress "not found" errors
-                }
-            }
-        }
+      // Validate the transformed data
+      validate(transformedData, this.validator);
 
-        // Merge existing data with new data
-        const transformedData = transformToDocumentFormat(
-            { ...existingDoc, ...data },
-            this.entityClass,
-            this.fieldMap
-        );
+      // Keep `_id` and `_rev` only if updating
+      if (existingDoc) {
+        transformedData._id = existingDoc.id;
+        transformedData._rev = existingDoc.rev;
+      }
 
-        // Validate the transformed data
-        validate(transformedData, this.validator);
+      // Insert/update the document
+      const response = await this.dataSource.connection.insert(transformedData);
 
-        // Keep `_id` and `_rev` only if updating
-        if (existingDoc) {
-            transformedData._id = existingDoc.id;
-            transformedData._rev = existingDoc.rev;
-        }
-
-        // Insert/update the document
-        const response = await this.dataSource.connection.insert(transformedData);
-
-        // Return the newly created/updated entity
-        return this.find(response.id);
+      // Return the newly created/updated entity
+      return this.find(response.id);
     } catch (err) {
-        throw err;
+      throw err;
     }
-}
+  }
 
 
 

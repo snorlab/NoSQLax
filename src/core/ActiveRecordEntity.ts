@@ -4,6 +4,7 @@ import DataSource from "./DataSource";
 import createRepository from "./CreateRepository"
 import { MangoQuery, MangoSelector } from "nano";
 type MangoOptions = Omit<MangoQuery, 'selector'>;
+import Nano, { DocumentScope  } from "nano";
 
 
 abstract class ActiveRecordEntity extends BaseEntity {
@@ -23,7 +24,7 @@ abstract class ActiveRecordEntity extends BaseEntity {
 
     // Retrieve the repository for the current entity class
     private static getRepo(): CouchRepository {
-        const repo = (this.constructor as typeof ActiveRecordEntity).repoMap.get(this.constructor as typeof ActiveRecordEntity);
+        const repo = (this as typeof ActiveRecordEntity).repoMap.get(this as typeof ActiveRecordEntity);
         if (!repo) {
             throw new Error(`Repository not initialized for ${this.constructor.name}. Make sure a data source is set.`);
         }
@@ -33,37 +34,48 @@ abstract class ActiveRecordEntity extends BaseEntity {
     // Static methods
     // 1. Find a document by its ID
     static async find(id: string): Promise<BaseEntity> {
-        return this.getRepo().find(id);
+        return await this.getRepo().find(id);
     }
 
     // 2. Find one document using a Mango selector
-    async findOne(selector: MangoSelector, options: MangoOptions = {}): Promise<BaseEntity> {
-        return (this.constructor as typeof ActiveRecordEntity).getRepo().findOne(selector, options)
+    static async findOne(selector: MangoSelector, options: MangoOptions = {}): Promise<BaseEntity> {
+        return await this.getRepo().findOne(selector, options)
+    }
+
+    static get dataSource(): DataSource {
+        return this.getRepo().dataSource;
     }
 
 
     // Non static methods
     // 4. Find many documents using a Mango selector
-    async findMany(selector: MangoSelector, options: MangoOptions = {}): Promise<BaseEntity[]> {
-        return (this.constructor as typeof ActiveRecordEntity).getRepo().findMany(selector, options)
+    static async findMany(selector: MangoSelector, options: MangoOptions = {}): Promise<BaseEntity[]> {
+        return await this.getRepo().findMany(selector, options)
     }
 
     // 5. Find all documents for the entity type
-    async findAll(options: MangoOptions = {}): Promise<BaseEntity[]> {
-        return (this.constructor as typeof ActiveRecordEntity).getRepo().findAll(options)
+    static async findAll(options: MangoOptions = {}): Promise<BaseEntity[]> {
+        return await this.getRepo().findAll(options)
     }
 
+    static async save(data: BaseEntity): Promise<BaseEntity> {
+        return await this.getRepo().save(data)
+    }
 
     async save(): Promise<BaseEntity> {
-        return (this.constructor as typeof ActiveRecordEntity).getRepo().save(this)
+        return await (this.constructor as typeof ActiveRecordEntity).getRepo().save(this)
     }
 
     // 8. Delete a document
+    static async delete(id: string): Promise<{ message: string }> {
+        return this.getRepo().delete(id);
+    }
+
     async delete(): Promise<{ message: string }> {
         if (!this.id) {
             throw new Error("Document does not exist");
         }
-        return (this.constructor as typeof ActiveRecordEntity).getRepo().delete(this.id);
+        return await (this.constructor as typeof ActiveRecordEntity).getRepo().delete(this.id);
     }
 
 }

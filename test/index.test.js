@@ -3,10 +3,12 @@
 */
 
 import { jest } from '@jest/globals';
-import Nano from 'nano';
+
 import CouchRepository from '../lib/core/CouchRepository';
-import BaseEntity from '../lib/core/BaseEntity';
+import DataMapperEntity from '../lib/core/DataMapperEntity';
+import ActiveRecordEntity from '../lib/core/ActiveRecordEntity';
 import DataSource from '../lib/core/DataSource';
+
 
 
 
@@ -63,9 +65,11 @@ const fieldMap = {
     type: 'doctype'
 };
 
+
+
 describe('NoSQLax Testing Suite', () => {
 
-    class TestEntity extends BaseEntity {
+    class TestEntity extends ActiveRecordEntity {
 
         static type = 'TestEntity';
 
@@ -83,9 +87,21 @@ describe('NoSQLax Testing Suite', () => {
             this.age = data.age;
             this.city = data.city;
         }
+
+        static async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
+        }
+
+        static async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await this.findMany({ "$and": [{ "$or": [{ name: { $eq: name } }] }, { "$not": { age: { $lt: age } } }], city: { $beginsWith: city } })
+        }
+
+        static async getViewA(options) {
+            return await this.dataSource.connection.view('design', 'view', options)
+        }
     };
 
-    class TestEntitySchemaId extends BaseEntity {
+    class TestEntitySchemaId extends ActiveRecordEntity {
 
         static type = 'TestEntity';
 
@@ -103,53 +119,32 @@ describe('NoSQLax Testing Suite', () => {
             this.age = data.age;
             this.city = data.city;
         }
+
+
+        static async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
+        }
+
+        static async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await this.findMany({ "$and": [{ "$or": [{ name: { $eq: name } }] }, { "$not": { age: { $lt: age } } }], city: { $beginsWith: city } })
+        }
+
+        static async getViewA(options) {
+            return await this.dataSource.connection.view('design', 'view', options)
+        }
     };
 
-    class TestRepository extends CouchRepository {
-        constructor(connection, options = {}) {
-            super(connection, options, TestEntity);
-        }
 
-        async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
-        }
-
-        async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.findMany({ "$and": [{ "$or": [{ name: { $eq: name } }] }, { "$not": { age: { $lt: age } } }], city: { $beginsWith: city } })
-        }
-
-        async getViewA(options) {
-            return this.dbConnection.view('design', 'view', options)
-        }
-
-    }
-
-    class TestRepositorySchemaId extends CouchRepository {
-        constructor(connection, options = {}) {
-            super(connection, options, TestEntitySchemaId);
-        }
-
-        async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.findOne({ name: { $eq: name }, age: { $gte: age }, city: { $eq: city } })
-        }
-
-        async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.findMany({ "$and": [{ "$or": [{ name: { $eq: name } }] }, { "$not": { age: { $lt: age } } }], city: { $beginsWith: city } })
-        }
-
-        async getViewA(options) {
-            return this.dbConnection.view('design', 'view', options)
-        }
-    }
 
 
     class TestService {
-        constructor(testRepository) {
-            this.testRepository = testRepository;
+
+        async save(testEntity) {
+            return await testEntity.save();
         }
 
-        async create(testEntity) {
-            return await this.testRepository.create(testEntity);
+        static async save(testEntity) {
+            return await TestEntity.save(testEntity);
         }
 
         // async findUserByName(name) {
@@ -162,37 +157,76 @@ describe('NoSQLax Testing Suite', () => {
 
         async getEntityById(id) {
             // Fetch a user by ID
-            return await this.testRepository.find(id)
+            return await TestEntity.find(id)
         }
 
         async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.testRepository.getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city)
+            return await TestEntity.getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city)
         }
 
         async findOneOrFailById(id) {
-            return await this.testRepository.find(id)
+            return await TestEntity.find(id)
         }
 
         async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-            return await this.testRepository.findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city)
-        }
-
-        async update(id, entity) {
-
-            return await this.testRepository.update(id, entity)
-
+            return await TestEntity.findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city)
         }
 
         async delete(id) {
-            return await this.testRepository.delete(id)
+            return await TestEntity.delete(id)
         }
 
         async getViewA(options) {
-            return testRepository.getViewA(options);
+            return TestEntity.getViewA(options);
         }
 
         async findAll() {
-            return testRepository.findAll();
+            return TestEntity.findAll();
+        }
+
+    }
+
+    class TestServiceSchemaId {
+
+        async save(testEntity) {
+            return await testEntity.save();
+        }
+
+        // async findUserByName(name) {
+        //   return await this.userRepository.findByName(name);
+        // }
+
+        // async findUserByEmailName(email, name) {
+        //   return await this.userRepository.findByEmailName(email, name);
+        // }
+
+        async getEntityById(id) {
+            // Fetch a user by ID
+            return await TestEntitySchemaId.find(id)
+        }
+
+        async getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await TestEntitySchemaId.getAllByAgeGreaterThanAndbByNameAndByCity(age, name, city)
+        }
+
+        async findOneOrFailById(id) {
+            return await TestEntitySchemaId.find(id)
+        }
+
+        async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+            return await TestEntitySchemaId.findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city)
+        }
+
+        async delete(id) {
+            return await TestEntitySchemaId.delete(id)
+        }
+
+        async getViewA(options) {
+            return TestEntitySchemaId.getViewA(options);
+        }
+
+        async findAll() {
+            return TestEntitySchemaId.findAll();
         }
 
     }
@@ -202,27 +236,27 @@ describe('NoSQLax Testing Suite', () => {
         database: 'test-db',
     });
 
-
-    let testRepository = new TestRepository(dataSource, {});
-    
-    let testRepositorySchemaId = new TestRepositorySchemaId(dataSource, {
+    // Attach the datasource to User
+    TestEntity.attachDataSource(dataSource, {});
+    TestEntitySchemaId.attachDataSource(dataSource, {
         schemas: [schema],
         allErrors: true
-      });
+    });
+
     let testService;
     let testServiceSchemaId;
 
     beforeEach(() => {
         // Reset mock functions and create a new instance of the repository
         jest.clearAllMocks();
-        testService = new TestService(testRepository);
-        testServiceSchemaId = new TestService(testRepositorySchemaId)
+        testService = new TestService();
+        testServiceSchemaId = new TestServiceSchemaId()
     });
 
     it('should Check that repository are initialized with a valid Entity', async () => {
         const invalidEntity = { name: 'Jane Doe', age: 25 };
         // Expect the constructor to throw an error
-        expect(() => new CouchRepository(dataSource, {}, invalidEntity)).toThrow('entityClass must extend BaseEntity');
+        expect(() => new CouchRepository(dataSource, {}, invalidEntity)).toThrow('entityClass must extend ActiveRecordEntity or DataMapperEntity');
     })
 
     describe('Save functionality', () => {
@@ -232,7 +266,7 @@ describe('NoSQLax Testing Suite', () => {
             mockConnection.insert.mockResolvedValue({ id: '12345', rev: '1-abc' });
             mockConnection.find.mockResolvedValue({ docs: [{ _id: '12345', _rev: '1-abc', name_field: 'John Doe', age: 30, address: { city: 'Lyon' } }] });
 
-            const savedEntity = await testService.create(testEntity);
+            const savedEntity = await testService.save(testEntity);
 
             expect(mockConnection.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -255,18 +289,18 @@ describe('NoSQLax Testing Suite', () => {
 
         it('should throw an error if the entity is not an instance of the entity class', async () => {
             const invalidEntity = { name: 'Jane Doe', age: 25 };
-            await expect(testService.create(invalidEntity)).rejects.toThrow('Data must be an instance of TestEntity');
+            await expect(TestService.save(invalidEntity)).rejects.toThrow('Data must be an instance of TestEntity');
         });
 
         it('should correctly construct a document from an entity with field mapping and update it', async () => {
 
-            const testEntity = new TestEntitySchemaId({ id: '12345', rev: '1-abc', name: 'John Smith', age: 30, city: 'Paris' });
+            const testEntity = new TestEntitySchemaId({ _id: '12345', _rev: '1-abc', name: 'John Smith', age: 30, city: 'Paris' });
             mockConnection.insert.mockResolvedValue({ id: '12345', rev: '2-abc' });
             mockConnection.find
                 .mockResolvedValueOnce({ docs: [{ _id: '12345', _rev: '1-abc', name_field: 'John Doe', age: 30, address: { city: 'Lyon' } }] })
                 .mockResolvedValueOnce({ docs: [{ _id: '12345', _rev: '2-abc', name_field: 'John Smith', age: 30, address: { city: 'Paris' } }] });
 
-            const savedEntity = await testServiceSchemaId.update('12345', testEntity);
+            const savedEntity = await testServiceSchemaId.save(testEntity);
             expect(mockConnection.find).toHaveBeenCalledTimes(2);
             expect(mockConnection.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -353,7 +387,7 @@ describe('NoSQLax Testing Suite', () => {
             const entities = await testService.findAll();
 
             expect(mockConnection.find).toHaveBeenCalledWith(
-                expect.objectContaining({"selector": {"doctype": "TestEntity"}})
+                expect.objectContaining({ "selector": { "doctype": "TestEntity" } })
             );
 
             expect(entities.length).toBe(1);
@@ -385,8 +419,8 @@ describe('NoSQLax Testing Suite', () => {
                     { key: "key2", value: "value2", doc: { id: "doc2" } },
                 ],
             });
-            const response = await testService.getViewA( { "key": "key" })
-            expect(response.rows).toHaveLength(2); 
+            const response = await testService.getViewA({ "key": "key" })
+            expect(response.rows).toHaveLength(2);
             await expect(mockConnection.view).toHaveBeenCalledWith(
                 'design', 'view', { "key": "key" }
             );
