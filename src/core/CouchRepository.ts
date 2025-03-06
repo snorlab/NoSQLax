@@ -243,7 +243,6 @@ abstract class CouchRepository {
     }
   }
 
-
   // 4. Find many documents using a Mango selector
   async findMany(selector: MangoSelector, options: MangoOptions = {}): Promise<BaseEntity[]> {
     try {
@@ -313,8 +312,6 @@ abstract class CouchRepository {
       throw err;
     }
   }
-
-
 
   // 8. Delete a document by ID
   async delete(id: string): Promise<{ message: string }> {
