@@ -27,6 +27,7 @@ class Validation {
   }
 
   validateData(data: any): void {
+
     const valid = this.validate(data); // Validate the data
 
     if (!valid) {

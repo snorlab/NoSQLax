@@ -1,5 +1,7 @@
-import Nano, { DocumentScope } from "nano";
+import Nano, { MangoQuery, MangoSelector } from "nano";
 import BaseEntity from './BaseEntity';
+import DataSource from "./DataSource";
+type MangoOptions = Omit<MangoQuery, 'selector'>;
 type EntityClass = {
     fieldMap: Record<string, string>;
     new (data: Record<string, any>): BaseEntity;
@@ -8,17 +10,16 @@ type EntityClass = {
     [key: string]: any;
 };
 declare abstract class CouchRepository {
-    private connection;
+    private dataSource;
     private validator;
     private entityClass;
     private fieldMap;
-    constructor(nanoConnection: DocumentScope<Nano.MaybeDocument>, ajvOptions: any, entityClass: EntityClass);
+    constructor(ds: DataSource, ajvOptions: any, entityClass: EntityClass);
     find(id: string): Promise<BaseEntity>;
-    findOne(selector: any): Promise<BaseEntity>;
-    findMany(selector: any): Promise<BaseEntity[]>;
-    findAll(): Promise<BaseEntity[]>;
-    create(data: EntityClass): Promise<BaseEntity>;
-    update(id: string, data: EntityClass): Promise<BaseEntity>;
+    findOne(selector: MangoSelector, options?: MangoOptions): Promise<BaseEntity>;
+    findMany(selector: MangoSelector, options?: MangoOptions): Promise<BaseEntity[]>;
+    findAll(options?: MangoOptions): Promise<BaseEntity[]>;
+    save(data: BaseEntity): Promise<BaseEntity>;
     delete(id: string): Promise<{
         message: string;
     }>;

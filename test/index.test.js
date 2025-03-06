@@ -60,7 +60,6 @@ const schema = {
 const fieldMap = {
     name: 'name_field',
     city: 'address.city',
-    _id: 'lol.id',
     type: 'doctype'
 };
 

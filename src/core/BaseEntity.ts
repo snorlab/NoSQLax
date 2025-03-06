@@ -3,7 +3,7 @@ abstract class BaseEntity {
   private _id?: string; 
   private _rev?: string;
 
-  static type: string;  // Entity-specific type (e.g., "User", "Product", etc.)
+  static type: string;  
   static schemaOrSchemaId: string | object;
   
   // Map from entity attributes to document fields, type is implicitly handled

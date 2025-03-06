@@ -3,6 +3,8 @@ import Validation from './Validation'; // Import the Validation class
 import BaseEntity from './BaseEntity';
 import { DocumentNotFoundError } from "./DocumentNotFoundError";
 import DataSource from "./DataSource";
+import ActiveRecordEntity from "./ActiveRecordEntity";
+import DataMapperEntity from "./DataMapperEntity";
 
 type MangoOptions = Omit<MangoQuery, 'selector'>;
 
@@ -15,12 +17,12 @@ type EntityClass = {
   [key: string]: any;
 };
 
-const validate = function(object: Object, validator:Validation)  {
+const validate = function (object: Object, validator: Validation) {
   // remove _id and _rev as they are implicitely required
   const objectToValidate = JSON.parse(JSON.stringify(object));
-    delete objectToValidate._id;
-    delete objectToValidate._rev;
-    validator.validateData(objectToValidate);
+  delete objectToValidate._id;
+  delete objectToValidate._rev;
+  validator.validateData(objectToValidate);
 }
 
 // Mango operators
@@ -78,7 +80,7 @@ function translateSelector(
 
 
 const transformToDocumentFormat = function (data: Record<string, any>, entityClass: EntityClass, fieldMap: Record<string, string>): Record<string, any> {
-  
+
   const transformedData: Record<string, any> = {};
 
   data.type = entityClass.type; // add type
@@ -150,7 +152,7 @@ const inverseTransform = function (document: Record<string, any>, fieldMap: Reco
 };
 
 
-const findUsingMango = async function (selector: Nano.MangoSelector={}, options: MangoOptions={}, entityClass: EntityClass, connection: DocumentScope<Nano.MaybeDocument>, fieldMap:Record<string, any>): Promise<Nano.MangoResponse<Nano.MaybeDocument>> {
+const findUsingMango = async function (selector: Nano.MangoSelector = {}, options: MangoOptions = {}, entityClass: EntityClass, connection: DocumentScope<Nano.MaybeDocument>, fieldMap: Record<string, any>): Promise<Nano.MangoResponse<Nano.MaybeDocument>> {
   try {
 
 
@@ -179,8 +181,8 @@ abstract class CouchRepository {
 
   constructor(ds: DataSource, ajvOptions: any, entityClass: EntityClass) {
     // Check if entityClass extends BaseEntity
-    if (!(entityClass.prototype instanceof BaseEntity)) {
-      throw new Error(`entityClass must extend BaseEntity`);
+    if (!(entityClass.prototype instanceof ActiveRecordEntity) && !(entityClass.prototype instanceof DataMapperEntity)) {
+      throw new Error(`entityClass must extend ActiveRecordEntity or DataMapperEntity`);
     }
 
     this.dataSource = ds;
@@ -189,7 +191,7 @@ abstract class CouchRepository {
 
     // Get the fieldMap from the entity class, but filter out _id and _rev
     const entityFieldMap = entityClass.fieldMap;
-    
+
     // Create a new fieldMap by excluding _id and _rev as keys and values
     this.fieldMap = Object.entries(entityFieldMap)
       .filter(([key, value]) => key !== '_id' && key !== '_rev' && value !== '_id' && value !== '_rev')
@@ -207,7 +209,7 @@ abstract class CouchRepository {
         throw new Error("ID must be provided");
       }
 
-      const res = this.findOne({ _id: id } )
+      const res = this.findOne({ _id: id })
 
       return res;
     } catch (err) {
@@ -224,8 +226,8 @@ abstract class CouchRepository {
       const res = await findUsingMango(
         translateSelector(selector, this.fieldMap),
         options,
-        this.entityClass, 
-        this.dataSource.connection, 
+        this.entityClass,
+        this.dataSource.connection,
         this.fieldMap);
 
       if (res.docs.length === 0) {
@@ -256,7 +258,7 @@ abstract class CouchRepository {
   // 5. Find all documents for the entity type
   async findAll(options: MangoOptions = {}): Promise<BaseEntity[]> {
     try {
-      const res = await findUsingMango({ }, options, this.entityClass, this.dataSource.connection, this.fieldMap);
+      const res = await findUsingMango({}, options, this.entityClass, this.dataSource.connection, this.fieldMap);
 
       return res.docs.map((doc) => new this.entityClass(inverseTransform(doc, this.fieldMap)));
     } catch (err) {
@@ -264,61 +266,52 @@ abstract class CouchRepository {
     }
   }
 
-
-
-
-  async create(data: EntityClass): Promise<BaseEntity> {
+  async save(data: BaseEntity): Promise<BaseEntity> {
     try {
+        if (!(data instanceof this.entityClass)) {
+            throw new Error(`Data must be an instance of ${this.entityClass.name}`);
+        }
 
-      if (!(data instanceof this.entityClass)) {
-        throw new Error(`Data must be an instance of ${this.entityClass.name}`);
-      }
+        let existingDoc: any = null;
 
+        // Check if this is an update (document exists)
+        if (data.id) {
+            try {
+                existingDoc = await this.find(data.id);
+            } catch (error) {
+                if (!(error instanceof DocumentNotFoundError)) {
+                    throw error; // Only suppress "not found" errors
+                }
+            }
+        }
 
+        // Merge existing data with new data
+        const transformedData = transformToDocumentFormat(
+            { ...existingDoc, ...data },
+            this.entityClass,
+            this.fieldMap
+        );
 
-      const transformedData = transformToDocumentFormat(data, this.entityClass, this.fieldMap);
+        // Validate the transformed data
+        validate(transformedData, this.validator);
 
+        // Keep `_id` and `_rev` only if updating
+        if (existingDoc) {
+            transformedData._id = existingDoc.id;
+            transformedData._rev = existingDoc.rev;
+        }
 
-      validate(transformedData, this.validator);
+        // Insert/update the document
+        const response = await this.dataSource.connection.insert(transformedData);
 
-      // Insert the document into the database
-      const response = await this.dataSource.connection.insert(transformedData);
-
-      // Return the newly created entity
-      return this.find(response.id);
-
+        // Return the newly created/updated entity
+        return this.find(response.id);
     } catch (err) {
-      throw err;
+        throw err;
     }
-  }
+}
 
 
-
-  // 7. Update an existing document
-  async update(id: string, data: EntityClass): Promise<BaseEntity> {
-    try {
-      const existingDoc = await this.find(id);
-      if (existingDoc === null) {
-        throw new Error("Document does not exists")
-      }
-      const updatedDoc = transformToDocumentFormat({
-        ...existingDoc,
-        ...data,
-      }, this.entityClass, this.fieldMap);
-      updatedDoc._id =  existingDoc.id;
-      updatedDoc._rev = existingDoc.rev
-
-
-      validate(updatedDoc, this.validator);
-
-      const response = await this.dataSource.connection.insert(updatedDoc);
-      // Return the newly created entity
-      return this.find(response.id);
-
-    } catch (err) {
-      throw err;
-    }
-  }
 
   // 8. Delete a document by ID
   async delete(id: string): Promise<{ message: string }> {
@@ -340,7 +333,7 @@ abstract class CouchRepository {
   }
 
 
-  static getFieldNameFromFieldMap(fieldMap: Record<string,string>, entityAttr: string): string {
+  static getFieldNameFromFieldMap(fieldMap: Record<string, string>, entityAttr: string): string {
 
     // If a custom mapping exists in the fieldMap, return it
     if (fieldMap[entityAttr]) {
