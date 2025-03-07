@@ -1,17 +1,30 @@
+
+type FieldMap = Record<string, string>;
+import Ajv, { } from 'ajv'; // Import Ajv types
+
 // src/BaseEntity.ts
 abstract class BaseEntity {
-  private _id?: string; 
+  private _id?: string;
   private _rev?: string;
 
-  static type: string;  
+  static type: string;
   static schemaOrSchemaId: string | object;
-  
+
+  // Store private values in a WeakMap
+  private privateData: WeakMap<any, any>;
+
+  // Index signature to allow dynamic properties
+  [key: string]: any; // This allows dynamic fields to be assigned to the instance
+
   // Map from entity attributes to document fields, type is implicitly handled
   static fieldMap: Record<string, string> = { type: "type" };  // Default fieldMap, type is implicitly required
 
-  constructor(data: { _id?: string; _rev?: string; [key: string]: any }) {
-    this._id = data._id; 
+  constructor(data: { _id?: string; _rev?: string;[key: string]: any }) {
+    this._id = data._id;
     this._rev = data._rev;
+
+    this.privateData = new WeakMap();
+    this.privateData.set(this, {});
 
     // Ensure schemaOrSchemaId is defined
     if ((this.constructor as typeof BaseEntity).schemaOrSchemaId === undefined) {
@@ -21,8 +34,43 @@ abstract class BaseEntity {
       throw new Error(`${this.constructor.name} must define type`);
     }
 
-    
   }
+
+  toJSON() {
+    const data = { ...this.privateData.get(this) } ;
+    if (this._id) data._id = this._id;
+    if (this._rev) data._rev = this._rev;
+    return data;
+  }
+
+  static extractFieldMapFromSchema(schemaOrSchemaId: any, ajvOptions: any): Record<string, string> {
+
+    const fieldMap: Record<string, string> = {};
+
+    // Initialize the AJV instance with options
+    const ajv = new Ajv(ajvOptions || {});
+    let schema: any = schemaOrSchemaId;
+
+
+    // If schemaOrSchemaId is a string (schema ID), fetch the schema
+    if (typeof schemaOrSchemaId === "string") {
+      schema = ajv.getSchema(schemaOrSchemaId); // Retrieve the schema
+      if (!schema) {
+        throw new Error(`Schema with ID ${schemaOrSchemaId} not found.`);
+      }
+    }
+
+    if (schema && schema.properties) {
+      // Only consider top-level properties from the schema
+      for (const key in schema.properties) {
+        fieldMap[key] = key; // Field name matches property name by default
+      }
+    }
+
+    return fieldMap;
+
+  }
+
 
   // Getter for id
   get id(): string | undefined {

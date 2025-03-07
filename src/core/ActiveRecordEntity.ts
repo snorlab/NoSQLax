@@ -18,7 +18,7 @@ abstract class ActiveRecordEntity extends BaseEntity {
     // Auto-attach DataSource & initialize repo when a child class is defined
     protected static attachDataSource(dataSource: DataSource, ajvOptions: any) {
         if (!this.repoMap.has(this)) {
-            this.repoMap.set(this, createRepository(dataSource, ajvOptions, this as any));
+            this.repoMap.set(this, createRepository(this as any, dataSource, {ajvOptions} ));
         }
     }
 
@@ -77,6 +77,12 @@ abstract class ActiveRecordEntity extends BaseEntity {
         }
         return await (this.constructor as typeof ActiveRecordEntity).getRepo().delete(this.id);
     }
+
+    // Define the extend method to add new query methods
+    static extend(newMethods: Record<string, Function>) {
+        Object.assign(this, newMethods);
+    }
+
 
 }
 

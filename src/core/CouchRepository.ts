@@ -202,6 +202,11 @@ abstract class CouchRepository {
 
   }
 
+  // Define the extend method to add new query methods
+  extend(newMethods: Record<string, Function>) {
+    Object.assign(this, newMethods);
+  }
+
   get dataSource() {
     return this._dataSource;
   }
@@ -289,7 +294,7 @@ abstract class CouchRepository {
 
       // Merge existing data with new data
       const transformedData = transformToDocumentFormat(
-        { ...existingDoc, ...data },
+        { ...existingDoc?.toJSON(), ...data?.toJSON() },
         this.entityClass,
         this.fieldMap
       );
