@@ -102,7 +102,7 @@ describe('NoSQLax Testing Suite', () => {
         "TestEntitySchemaId",
         "TestEntity",
         schema,
-        dataSource
+        {fieldMap}
     );
 
     const testEntitySchemaIdRepo = createRepository(TestEntitySchemaId,

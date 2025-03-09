@@ -1,9 +1,19 @@
 
 type FieldMap = Record<string, string>;
+interface IBaseEntity {
+  id?: string;
+  rev?: string;
+
+  // Allow dynamic properties
+  [key: string]: any;
+
+  // Convert entity to JSON object
+  toJSON(): Record<string, any>;
+}
 import Ajv, { } from 'ajv'; // Import Ajv types
 
 // src/BaseEntity.ts
-abstract class BaseEntity {
+abstract class BaseEntity implements IBaseEntity {
   private _id?: string;
   private _rev?: string;
 
@@ -34,10 +44,43 @@ abstract class BaseEntity {
       throw new Error(`${this.constructor.name} must define type`);
     }
 
+    // Initialize the AJV instance with options
+    const ajv = new Ajv({});
+    let schema: any = this.schemaOrSchemaId;
+
+    // If schemaOrSchemaId is a string (schema ID), fetch the schema
+    if (typeof schema === "string") {
+      schema = ajv.getSchema(schema)?.schema; // Retrieve the schema
+      if (!schema) {
+        throw new Error(`Schema with ID ${schema} not found.`);
+      }
+    }
+
+    const schemaProperties = schema?.properties || {};
+
+    // Dynamically add getters and setters based on schema
+    Object.keys(schemaProperties).forEach(property => {
+      Object.defineProperty(this, property, {
+        get() {
+          return this.privateData.get(this)[property];  // Retrieve the field value
+        },
+        set(value) {
+          this.privateData.get(this)[property] = value;  // Assign value to internal variable
+        },
+        enumerable: true,
+        configurable: true
+      });
+    });
+
+    // Initialize properties from schema
+    Object.keys(schemaProperties).forEach(property => {
+      this.privateData.get(this)[property] = data[property];
+    });
+
   }
 
   toJSON() {
-    const data = { ...this.privateData.get(this) } ;
+    const data = { ...this.privateData.get(this) };
     if (this._id) data._id = this._id;
     if (this._rev) data._rev = this._rev;
     return data;
