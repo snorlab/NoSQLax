@@ -58,25 +58,6 @@ abstract class BaseEntity implements IBaseEntity {
 
     const schemaProperties = schema?.properties || {};
 
-    // Dynamically add getters and setters based on schema
-    Object.keys(schemaProperties).forEach(property => {
-      Object.defineProperty(this, property, {
-        get() {
-          return this.privateData.get(this)[property];  // Retrieve the field value
-        },
-        set(value) {
-          this.privateData.get(this)[property] = value;  // Assign value to internal variable
-        },
-        enumerable: true,
-        configurable: true
-      });
-    });
-
-    // Initialize properties from schema
-    Object.keys(schemaProperties).forEach(property => {
-      this.privateData.get(this)[property] = data[property];
-    });
-
   }
 
   toJSON() {
@@ -84,34 +65,6 @@ abstract class BaseEntity implements IBaseEntity {
     if (this._id) data._id = this._id;
     if (this._rev) data._rev = this._rev;
     return data;
-  }
-
-  static extractFieldMapFromSchema(schemaOrSchemaId: any, ajvOptions: any): Record<string, string> {
-
-    const fieldMap: Record<string, string> = {};
-
-    // Initialize the AJV instance with options
-    const ajv = new Ajv(ajvOptions || {});
-    let schema: any = schemaOrSchemaId;
-
-
-    // If schemaOrSchemaId is a string (schema ID), fetch the schema
-    if (typeof schemaOrSchemaId === "string") {
-      schema = ajv.getSchema(schemaOrSchemaId); // Retrieve the schema
-      if (!schema) {
-        throw new Error(`Schema with ID ${schemaOrSchemaId} not found.`);
-      }
-    }
-
-    if (schema && schema.properties) {
-      // Only consider top-level properties from the schema
-      for (const key in schema.properties) {
-        fieldMap[key] = key; // Field name matches property name by default
-      }
-    }
-
-    return fieldMap;
-
   }
 
 

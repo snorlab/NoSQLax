@@ -31,6 +31,7 @@
     "url": "https://github.com/gregblt/NoSQLax"
   },
   "dependencies": {
+    "@apidevtools/json-schema-ref-parser": "^11.9.3",
     "ajv": "^8.17.1",
     "nano": "^10.1.4"
   },

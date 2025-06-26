@@ -10,6 +10,7 @@ import ActiveRecordEntity from '../lib/core/ActiveRecordEntity';
 import DataSource from '../lib/core/DataSource';
 import { createActiveRecordEntity, createDataMapperEntity } from '../lib/core/createEntity'
 import createRepository from '../lib/core/createRepository'
+const $RefParser = require("@apidevtools/json-schema-ref-parser");
 
 /* jest.mock('nano', () => jest.fn(() => ({
     use: jest.fn().mockReturnValue({
@@ -58,6 +59,36 @@ const schema = {
     required: ['name', 'age', 'address'],
 }
 
+const schema2 = {
+    $id: "schema2",
+    type: 'object',
+    $ref: 'schema3'
+}
+
+const schema3 = {
+    $id: "schema3",
+    properties: {
+        doctype: {
+            "type": "string"
+        },
+        name: { type: 'string' },
+        age: { type: 'number' },
+        address: {
+            type: 'object',
+            properties: {
+                city: {
+                    'type': 'string'
+                }
+            },
+            additionalProperties: false
+        }
+    },
+    additionalProperties: false,
+    required: ['name', 'age', 'address']
+}
+
+
+
 const fieldMap = {
     type: 'doctype'
 };
@@ -101,24 +132,27 @@ describe('NoSQLax Testing Suite', () => {
     const TestEntitySchemaId = createDataMapperEntity(
         "TestEntitySchemaId",
         "TestEntity",
-        schema,
-        {fieldMap}
+        schema2,
+        { fieldMap }
     );
 
     const testEntitySchemaIdRepo = createRepository(TestEntitySchemaId,
         dataSource,
-        
+
         {
-        ajvOptions: {
-            schemas: [schema],
-            allErrors: true
-        },
-        methods: { // methods
-            async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
-                return await this.findOne({ name: { $eq: name }, age: { $gte: age }, "address.city": { $eq: city } })
+            ajvOptions: {
+                schemas: [schema2, schema3],
+                allErrors: true,
+                inlineRefs: true,
+                // This ensures all references are resolved when compiling
+                addUsedSchema: false
+            },
+            methods: { // methods
+                async findOrFailByAgeGreaterThanAndbByNameAndByCity(age, name, city) {
+                    return await this.findOne({ name: { $eq: name }, age: { $gte: age }, "address.city": { $eq: city } })
+                }
             }
-        }
-    })
+        })
 
 
     testEntitySchemaIdRepo.extend({
@@ -252,6 +286,16 @@ describe('NoSQLax Testing Suite', () => {
                 name: { type: "string" },
                 age: { type: "number" },
                 email: { type: "string" },
+                adress: {
+                    type: "object",
+                    properties: {
+                        city: {
+                            type: "string"
+                        }
+                        
+                    },
+                    required: ["city"]
+                }
             },
         };
 
@@ -265,7 +309,8 @@ describe('NoSQLax Testing Suite', () => {
             {
                 ajvOptions: {},
                 fieldMap: {
-                    type: "doctype"
+                    type: "doctype",
+                    city: "adress.city"
                 },
             }
         );
@@ -302,6 +347,9 @@ describe('NoSQLax Testing Suite', () => {
     describe('Save functionality', () => {
 
         it('should correctly construct a document from an entity with field mapping and save it', async () => {
+
+            let schema2deref = await $RefParser.dereference(schema2);
+            
             const testEntity = new TestEntity({ name: 'John Doe', age: 30, address: { city: 'Lyon' } });
             mockConnection.insert.mockResolvedValue({ id: '12345', rev: '1-abc' });
             mockConnection.find.mockResolvedValue({ docs: [{ _id: '12345', _rev: '1-abc', name: 'John Doe', age: 30, address: { city: 'Lyon' } }] });

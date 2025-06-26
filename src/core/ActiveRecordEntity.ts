@@ -63,7 +63,7 @@ abstract class ActiveRecordEntity extends BaseEntity {
     }
 
     async save(): Promise<BaseEntity> {
-        return await (this.constructor as typeof ActiveRecordEntity).getRepo().save(this)
+        return await (this.constructor as typeof ActiveRecordEntity).save(this)
     }
 
     // 8. Delete a document
@@ -75,7 +75,7 @@ abstract class ActiveRecordEntity extends BaseEntity {
         if (!this.id) {
             throw new Error("Document does not exist");
         }
-        return await (this.constructor as typeof ActiveRecordEntity).getRepo().delete(this.id);
+        return await (this.constructor as typeof ActiveRecordEntity).delete(this.id);
     }
 
     // Define the extend method to add new query methods
