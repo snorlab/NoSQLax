@@ -1,5 +1,6 @@
 
 type FieldMap = Record<string, string>;
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 
 interface IBaseEntity {
   id?: string;
@@ -13,57 +14,68 @@ interface IBaseEntity {
 }
 import Ajv, { ValidateFunction, ErrorObject, AnySchema, AnySchemaObject } from 'ajv';
 
+function collectAndRemoveAllSchemas(
+  schema: any,
+  path: string[],
+  key: string,
+  results: any[]
+): void {
+  if (!schema || typeof schema !== 'object') return;
+
+  // Base case: found the key
+  if (path.length === 0 && schema.properties?.[key]) {
+    results.push(schema.properties[key]);
+    delete schema.properties[key];
+
+    if (Array.isArray(schema.required)) {
+      schema.required = schema.required.filter((r: string) => r !== key);
+    }
+    return;
+  }
+
+  const [next, ...rest] = path;
+
+  // Dive into nested property
+  if (schema.properties?.[next]) {
+    collectAndRemoveAllSchemas(schema.properties[next], rest, key, results);
+  }
+
+  // Dive into oneOf / anyOf / allOf branches
+  for (const comb of ['oneOf', 'anyOf', 'allOf']) {
+    if (Array.isArray(schema[comb])) {
+      for (const subSchema of schema[comb]) {
+        collectAndRemoveAllSchemas(subSchema, path, key, results);
+      }
+    }
+  }
+}
+
 
 function restructureSchemaFromFieldMap(
   schema: AnySchemaObject,
   fieldMap: Record<string, string>
 ): AnySchemaObject {
-  const cloned = JSON.parse(JSON.stringify(schema)); // Deep clone to avoid mutating the original
-  const topLevelProps = cloned.properties || {};
+  const cloned = JSON.parse(JSON.stringify(schema));
   const toAdd: Record<string, any> = {};
 
   for (const [aliasName, fieldPath] of Object.entries(fieldMap)) {
     const parts = fieldPath.split('.');
-    if (parts.length <= 1) continue; // Only process nested fields
+    if (parts.length <= 1) continue;
 
-    const propKey = parts.pop()!;
-    let current = cloned;
-    let found = true;
+    const propKey = parts.pop()!; // use non-null assertion
+    const parentPath = parts;
 
-    for (const part of parts) {
-      if (
-        current &&
-        typeof current === 'object' &&
-        current.properties &&
-        current.properties[part] &&
-        current.properties[part].type === 'object'
-      ) {
-        current = current.properties[part];
-      } else {
-        found = false;
-        break;
-      }
-    }
+    const collectedSchemas: any[] = [];
+    collectAndRemoveAllSchemas(cloned, parentPath, propKey, collectedSchemas);
 
-    if (found && current?.properties?.[propKey]) {
-      const fieldSchema = current.properties[propKey];
-
-      // Add it to top-level properties with the alias name
-      toAdd[aliasName] = fieldSchema;
-
-      // Remove the property from its original nested location
-      delete current.properties[propKey];
-
-      // Also remove from required, if applicable
-      if (Array.isArray(current.required)) {
-        current.required = current.required.filter((r:String) => r !== propKey);
-      }
+    if (collectedSchemas.length === 1) {
+      toAdd[aliasName] = collectedSchemas[0];
+    } else if (collectedSchemas.length > 1) {
+      toAdd[aliasName] = { oneOf: collectedSchemas };
     }
   }
 
-  // Add extracted properties to top-level schema
-  cloned.properties = { ...topLevelProps, ...toAdd };
-
+  cloned.properties = { ...(cloned.properties || {}), ...toAdd };
   return cloned;
 }
 
@@ -86,8 +98,6 @@ abstract class BaseEntity implements IBaseEntity {
 
   // Map from entity attributes to document fields, type is implicitly handled
   static fieldMap: Record<string, string> = { type: "type" };  // Default fieldMap, type is implicitly required
-
-
 
   constructor(data: { _id?: string; _rev?: string;[key: string]: any } = {}) {
     this._id = data._id;
@@ -118,11 +128,11 @@ abstract class BaseEntity implements IBaseEntity {
     } else {
       throw new Error('Invalid schema or schema ID provided');
     }
-      
+
 
     // Replace with actual restructuring if you support it
     const rawSchema = schema;
-    
+
     const fieldMap = ctor.fieldMap || {};
     const reverseMap: Record<string, string> = {};
     for (const [alias, path] of Object.entries(fieldMap)) {
@@ -132,9 +142,15 @@ abstract class BaseEntity implements IBaseEntity {
     schema = restructureSchemaFromFieldMap(rawSchema, fieldMap);
 
     const schemaProperties = schema.properties || {};
+    const schemaDefs: any = schema.definitions;
 
     for (const [schemaProp, schemaDef] of Object.entries(schemaProperties)) {
       const propName = reverseMap[schemaProp] || schemaProp;
+      
+      // Inject definitions into subschema if needed
+      if (typeof schemaDef === 'object' && schemaDefs) {
+        (schemaDef as any).definitions = schemaDefs;
+      }
 
       const validator: ValidateFunction | undefined =
         typeof schemaDef === 'object' ? ajv.compile(schemaDef as object) : undefined;
