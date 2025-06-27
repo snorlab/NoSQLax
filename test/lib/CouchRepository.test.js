@@ -12,6 +12,7 @@ jest.mock('../../lib/core/Validation', () => {
 
 const mockInsert = jest.fn();
 const mockFind = jest.fn();
+const mockFindDs = jest.fn();
 const mockDestroy = jest.fn();
 
 jest.mock('../../lib/core/DataSource', () => {
@@ -19,9 +20,9 @@ jest.mock('../../lib/core/DataSource', () => {
         __esModule: true, // ensures .default works
         default: jest.fn().mockImplementation(() => ({
             connection: {
-                insert: jest.fn(),
-                find: jest.fn(),
-                destroy: jest.fn()
+                insert: mockInsert,
+                find: mockFindDs,
+                destroy: mockDestroy
             }
         }))
     };
@@ -31,6 +32,7 @@ describe('CouchRepository (JS test)', () => {
     let repo;
 
     class TestEntity extends ActiveRecordEntity {
+        
         static type = 'test';
         static schemaOrSchemaId = {
             type: 'object',
@@ -57,24 +59,49 @@ describe('CouchRepository (JS test)', () => {
         repo = new CouchRepository(ds, {}, TestEntity);
     });
 
-    test('findOne returns an entity', async () => {
-        mockFind.mockResolvedValueOnce({ docs: [{ _id: '1', name: 'Alice', nested: { city: 'Paris' } }] });
+    test('find success', async () => {
 
-        const result = await repo.findOne({ name: { $eq: 'Alice' } });
+        let entity = new TestEntity({_id: "uuid", name: 'Alice', city: "Paris"});
+        mockFindDs.mockResolvedValueOnce({ docs: [{ _id: "uuid", name: 'Alice', nested: { city: 'Paris' } }] });
+
+
+        const result = await repo.find(1);
+
+        expect(result.id).toBe("uuid");
+        expect(result.name).toBe("Alice");
+        expect(result.city).toBe("Paris");
+    });
+
+    test('find with null id throws error', async () => {
+        await expect(repo.find(null)).rejects.toThrow("ID must be provided");
+    });
+
+    test('findOne returns an entity', async () => {
+        mockFindDs.mockResolvedValueOnce({ docs: [{ _id: '1', name: 'Alice', nested: { city: 'Paris' } }] });
+
+        const result = await repo.findOne({ name: { $or: [{ $eq: 'Alice' },{ $eq: 'Bob' }] } });
+
+        // then in your test
+        expect(mockFindDs).toHaveBeenCalledWith(expect.objectContaining({
+            selector: expect.objectContaining({
+                name: { $or: [{ $eq: 'Alice' },{ $eq: 'Bob' }] },
+                type: 'test'
+            })
+        }));
 
         expect(result).toBeInstanceOf(TestEntity);
-        expect(result.getName()).toBe('Alice');
-        expect(result.getCity()).toBe('Paris');
+        expect(result.name).toBe('Alice');
+        expect(result.city).toBe('Paris');
     });
 
     test('findOne throws when no docs found', async () => {
-        mockFind.mockResolvedValueOnce({ docs: [] });
+        mockFindDs.mockResolvedValueOnce({ docs: [] });
 
         await expect(repo.findOne({ name: 'Missing' })).rejects.toThrow(DocumentNotFoundError);
     });
 
     test('findMany returns multiple entities', async () => {
-        mockFind.mockResolvedValueOnce({
+        mockFindDs.mockResolvedValueOnce({
             docs: [
                 { _id: '1', name: 'Alice', nested: { city: 'Paris' } },
                 { _id: '2', name: 'Bob', nested: { city: 'Berlin' } }
@@ -91,18 +118,18 @@ describe('CouchRepository (JS test)', () => {
         const entity = new TestEntity({ name: 'Alice', city: 'Paris' });
 
         mockInsert.mockResolvedValueOnce({ id: 'abc', rev: '1-x' });
-        mockFind.mockResolvedValueOnce({ docs: [{ _id: 'abc', name: 'Alice', nested: { city: 'Paris' } }] });
+        mockFindDs.mockResolvedValueOnce({ docs: [{ _id: 'abc', name: 'Alice', nested: { city: 'Paris' } }] });
 
         const saved = await repo.save(entity);
 
         expect(mockInsert).toHaveBeenCalled();
-        expect(saved.getCity()).toBe('Paris');
+        expect(saved.city).toBe('Paris');
     });
 
     test('delete removes document', async () => {
         const mockEntity = new TestEntity({ _id: 'del-id', _rev: '1-x', name: 'T', city: 'Z' });
 
-        mockFind.mockResolvedValueOnce(mockEntity);
+        mockFindDs.mockResolvedValueOnce({ docs: [{ _id: '1', _rev: '1-x',name: 'Alice', nested: { city: 'Paris' } }] });
         mockDestroy.mockResolvedValueOnce({ ok: true });
 
         const result = await repo.delete('del-id');

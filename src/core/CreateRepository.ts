@@ -28,9 +28,9 @@ export default function createRepository(
         }
     };
 
-    // Attach static methods if provided
+    // Attach instance methods if provided
     if (config.methods) {
-        Object.assign(DynamicRepoClass, config.methods);
+        Object.assign(DynamicRepoClass.prototype, config.methods);
     }
 
     return new DynamicRepoClass();
