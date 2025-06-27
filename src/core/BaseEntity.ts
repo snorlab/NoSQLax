@@ -14,17 +14,35 @@ interface IBaseEntity {
 }
 import Ajv, { ValidateFunction, ErrorObject, AnySchema, AnySchemaObject } from 'ajv';
 
+function resolveRef(ref: string, definitions: Record<string, any>): any {
+  const match = ref.match(/^#\/definitions\/(.+)$/);
+  if (!match) throw new Error(`Unsupported $ref format: ${ref}`);
+  const key = match[1];
+  const resolved = definitions[key];
+  if (!resolved) throw new Error(`Could not resolve $ref: ${ref}`);
+  return resolved;
+}
+
 function collectAndRemoveAllSchemas(
   schema: any,
   path: string[],
   key: string,
-  results: any[]
+  results: any[],
+  definitions: Record<string, any>
 ): void {
   if (!schema || typeof schema !== 'object') return;
 
-  // Base case: found the key
+  // 🔁 If it's a $ref, resolve it
+  if (typeof schema === 'object' && schema.$ref) {
+    schema = resolveRef(schema.$ref, definitions);
+  }
+
+  // Base case: found the key in properties
   if (path.length === 0 && schema.properties?.[key]) {
-    results.push(schema.properties[key]);
+    let fieldSchema = schema.properties[key];
+
+
+    results.push(fieldSchema);
     delete schema.properties[key];
 
     if (Array.isArray(schema.required)) {
@@ -35,38 +53,38 @@ function collectAndRemoveAllSchemas(
 
   const [next, ...rest] = path;
 
-  // Dive into nested property
+  // Dive into nested propertiess
   if (schema.properties?.[next]) {
-    collectAndRemoveAllSchemas(schema.properties[next], rest, key, results);
+    collectAndRemoveAllSchemas(schema.properties[next], rest, key, results, definitions);
   }
 
-  // Dive into oneOf / anyOf / allOf branches
+  // Dive into oneOf / anyOf / allOf
   for (const comb of ['oneOf', 'anyOf', 'allOf']) {
     if (Array.isArray(schema[comb])) {
       for (const subSchema of schema[comb]) {
-        collectAndRemoveAllSchemas(subSchema, path, key, results);
+        collectAndRemoveAllSchemas(subSchema, path, key, results, definitions);
       }
     }
   }
 }
-
 
 function restructureSchemaFromFieldMap(
   schema: AnySchemaObject,
   fieldMap: Record<string, string>
 ): AnySchemaObject {
   const cloned = JSON.parse(JSON.stringify(schema));
+  const definitions = cloned.definitions || {};
   const toAdd: Record<string, any> = {};
 
   for (const [aliasName, fieldPath] of Object.entries(fieldMap)) {
     const parts = fieldPath.split('.');
     if (parts.length <= 1) continue;
 
-    const propKey = parts.pop()!; // use non-null assertion
+    const propKey = parts.pop()!;
     const parentPath = parts;
 
     const collectedSchemas: any[] = [];
-    collectAndRemoveAllSchemas(cloned, parentPath, propKey, collectedSchemas);
+    collectAndRemoveAllSchemas(cloned, parentPath, propKey, collectedSchemas, definitions);
 
     if (collectedSchemas.length === 1) {
       toAdd[aliasName] = collectedSchemas[0];
@@ -139,14 +157,16 @@ abstract class BaseEntity implements IBaseEntity {
       reverseMap[path] = alias;
     }
 
-    schema = restructureSchemaFromFieldMap(rawSchema, fieldMap);
+    // compile to dereference the schema
+    const validator =ajv.compile(rawSchema);
+    const resolvedSchema = validator.schema as AnySchemaObject;
+    restructureSchemaFromFieldMap(rawSchema, fieldMap);
 
     const schemaProperties = schema.properties || {};
     const schemaDefs: any = schema.definitions;
 
     for (const [schemaProp, schemaDef] of Object.entries(schemaProperties)) {
       const propName = reverseMap[schemaProp] || schemaProp;
-      
       // Inject definitions into subschema if needed
       if (typeof schemaDef === 'object' && schemaDefs) {
         (schemaDef as any).definitions = schemaDefs;
