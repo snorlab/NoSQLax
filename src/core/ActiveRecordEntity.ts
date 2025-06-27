@@ -10,6 +10,7 @@ import Nano, { DocumentScope  } from "nano";
 abstract class ActiveRecordEntity extends BaseEntity {
 
     private static repoMap: Map<typeof ActiveRecordEntity, CouchRepository> = new Map();
+    
 
     constructor(data: { _id?: string; _rev?: string;[key: string]: any }) {
         super(data);

@@ -107,9 +107,10 @@ abstract class BaseEntity implements IBaseEntity {
 
   static type: string;
   static schemaOrSchemaId: string | object;
+  static ajvOptions: any = {};
+
   private __data: WeakMap<any, Record<string, any>> = new WeakMap();
   private validators: Record<string, ValidateFunction> = {};
-
 
   // Index signature to allow dynamic properties
   [key: string]: any; // This allows dynamic fields to be assigned to the instance
@@ -117,7 +118,7 @@ abstract class BaseEntity implements IBaseEntity {
   // Map from entity attributes to document fields, type is implicitly handled
   static fieldMap: Record<string, string> = { type: "type" };  // Default fieldMap, type is implicitly required
 
-  constructor(data: { _id?: string; _rev?: string;[key: string]: any } = {}) {
+  constructor(data: { _id?: string; _rev?: string;[key: string]: any } = {}, ajvOptions: any = {}) {
     this._id = data._id;
     this._rev = data._rev;
     this.__data.set(this, {});
@@ -129,7 +130,8 @@ abstract class BaseEntity implements IBaseEntity {
       return;
     }
 
-    const ajv = new Ajv({});
+    const ajvOptionsCtor = ctor.ajvOptions || {};
+    const ajv = new Ajv(ajvOptionsCtor);
     let schema: any;
 
     if (typeof ctor.schemaOrSchemaId === 'string') {
@@ -158,7 +160,7 @@ abstract class BaseEntity implements IBaseEntity {
     }
 
     // compile to dereference the schema
-    const validator =ajv.compile(rawSchema);
+    const validator = ajv.compile(rawSchema);
     const resolvedSchema = validator.schema as AnySchemaObject;
     restructureSchemaFromFieldMap(rawSchema, fieldMap);
 

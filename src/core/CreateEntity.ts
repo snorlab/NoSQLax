@@ -32,7 +32,8 @@ function createEntityBase(
   const DynamicEntityClass = class extends EntityClass {
     static type = type;
     static schemaOrSchemaId = schemaOrSchemaId;
-    static fieldMap = fieldMap;
+    static fieldMap = config.fieldMap;
+    static ajvOptions = config.ajvOptions;
 
     constructor(data: Record<string, any>) {
       super(data);

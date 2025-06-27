@@ -16,7 +16,8 @@
     "watch": "tsc --watch",
     "data-mapper-basic-example": "node example/basic-example/data-mapper-basic-example.js",
     "active-record-basic-example": "node example/basic-example/active-record-basic-example.js",
-    "custom-field-mapping-example": "node example/custom-field-mapping/custom-field-mapping-example.js"
+    "custom-field-mapping-example": "node example/custom-field-mapping/custom-field-mapping-example.js",
+    "complex-schema-example": "node example/complex-schema/complex-schema-example.js"
   },
   "keywords": [
     "couchdb",
