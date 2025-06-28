@@ -39,6 +39,10 @@ function createEntityBase(
       super(data);
     }
 
+    static initialize(): void {
+      super.initialize();
+  }
+
   };
 
 
@@ -48,6 +52,9 @@ function createEntityBase(
   }
 
   Object.defineProperty(DynamicEntityClass, 'name', { value: name });
+
+  // Initialize schema, define accessors
+  DynamicEntityClass.initialize();
 
   return DynamicEntityClass as unknown;
 }
