@@ -1,7 +1,7 @@
 {
   "name": "nosqlax",
   "version": "1.1.0",
-  "description": "NoSQLax is a lightweight JavaScript library designed to simplify and streamline CRUD operations with CouchDB. NoSQLax provides a unified and intuitive repository pattern to handle your data effortlessly.",
+  "description": "NoSQLax is a modern, lightweight JavaScript Object Document Mapper(ODM) library that makes working with CouchDB a breeze. Inspired by CouchDB’s “Relax” philosophy and the chill vibes of Snorlax, NoSQLax takes the hassle out of managing your data, offering a streamlined and intuitive repository pattern to handle CRUD operations effortlessly.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
@@ -21,9 +21,12 @@
   },
   "keywords": [
     "couchdb",
+    "odm",
     "orm",
     "nano",
     "repository-pattern",
+    "data-mapper-pattern",
+    "active-record-pattern",
     "schema",
     "ajv",
     "couchdb-helper"
