@@ -1,17 +1,25 @@
 <img src="nosqlax.png" alt="drawing" width="400"/>
 
 # NoSQLax 💤 - A Relaxed Repository for CouchDB
-NoSQLax is a modern, lightweight JavaScript library that makes working with CouchDB a breeze. Inspired by CouchDB’s “Relax” philosophy and the chill vibes of Snorlax, NoSQLax takes the hassle out of managing your data, offering a streamlined and intuitive repository pattern to handle CRUD operations effortlessly.
+NoSQLax is a modern, lightweight JavaScript Object Document Mapper(ODM) library that makes working with CouchDB a breeze. Inspired by CouchDB’s “Relax” philosophy and the chill vibes of Snorlax, NoSQLax takes the hassle out of managing your data, offering a streamlined and intuitive repository pattern to handle CRUD operations effortlessly.
+
+Inspired by Hibernate, Ottoman.js, and TypeORM, NoSQLax offers a powerful and intuitive developer experience for managing CouchDB documents using familiar patterns and standards.
 
 Whether you're validating data, extending functionality, or simplifying database interactions, NoSQLax ensures your CouchDB experience is as laid-back as its motto.
 
 ## Key Features
-- Effortless CRUD Operations: Manage CouchDB documents with a consistent, simple API for create, read, update, and delete. No boilerplate — just relax and code.
-- Seamless Schema Validation: Built-in JSON schema validation using AJV ensures your data is clean and reliable, either inline or through shared schema references.
-- Extensible by Design: Tailor repositories to your needs by easily adding custom methods and extending base functionality.
-- Entity-Centric Design: Map CouchDB documents to entities with support for data transformation and schema alignment.
-- Developer-Focused Simplicity: Minimize cognitive load with clear, predictable methods and patterns, so you can focus on building features, not debugging database interactions.
-- Flexible CouchDB Support: Works seamlessly with CouchDB’s schema-less nature while enabling structured and validated data models.
+- JSON Schema–Based Entity Modeling
+Describe your data using JSON Schema and get automatic validation, structure, and introspection.
+- Supports Both Active Record & Data Mapper Patterns
+Choose the architectural pattern that suits your project — model-centric (Active Record) or repository-centric (Data Mapper).
+- Field Mapping & Nested Property Flattening
+Seamlessly map nested document structures into clean, flat JavaScript objects using field maps.
+- Built-in Validation with Ajv
+Ensure your data is always valid before it’s saved — with runtime validation powered by Ajv.
+- Auto-Generated Getters & Setters
+Access your fields via user.name or user.city, with schema-defined validation baked in.
+- Extendable Repository System
+Define reusable custom query methods on top of CouchDB’s Mango queries.
 
 ## Why Choose NoSQLax?
 NoSQLax bridges the gap between CouchDB’s flexibility and the structure developers need. Whether you're building a lightweight application or scaling a robust API, NoSQLax gives you the tools to manage your data reliably without sacrificing simplicity or performance.
@@ -21,148 +29,314 @@ Take a deep breath, relax, and let NoSQLax handle the heavy lifting for your Cou
 ```npm install nosqlax```
 
 ## Getting started
-### 1. Define Your Entity
-Start by defining your entity by extending the `BaseEntity`. You can specify its type, the schema, and how the entity’s properties map to the CouchDB document. The schema can be represented by an AJV object, or you can use a schema ID (we’ll cover this later with AJV options). _id, _rev and the type property don't need to be put in the schemas, it's automatically added when validating.
+### 1. Basic usage
+Initialize a datasource (couchdb connection), create an entity using the helper method and use it right away!
 ```
-const { BaseEntity } = require('nosqlax');  // Your library
-// AJV schema for CouchDB document validation
-const userSchema = {
-  type: 'object',
-  properties: {
-    email: { type: 'string', format: 'email' },
-    name: { type: 'string' },
-    contact: {
+const { createActiveRecordEntity, DataSource } = require('nosqlax');
+
+const schema = {
+    "$id": "my-schema",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "definitions": {
+        "address": {
+            "type": "object",
+            "properties": {
+                "city": { "type": "string" }
+            }
+        }
+    },
+    "properties": {
+        "name": { "type": "string" },
+        "address": {
+            "$ref": "#/definitions/address"
+        }
+    }
+}
+
+// Datasource (connexion)
+const ds = new DataSource({
+    url: 'http://localhost:5984',
+    database: 'nosqlax-test',
+    username: 'admin',
+    password: 'password'
+})
+
+// Create the User class using the helper
+const User = createActiveRecordEntity(
+    "User", // class name
+    "user", // type
+    schema, // Schema or schema ID
+    ds, // Data source
+    { // additional query methods
+
+        methods: {
+            async findByName(name) {
+                return this.findOne({ name: { $eq: name } });
+            },
+            async getViewA(options) {
+                return this.dbConnection.view('design', 'view', options)
+                // you can also process view results here to return User entities
+            }
+        }
+
+    })
+
+// Instanciate a user
+const user = new User({ name: "John Active" });
+user.address = { "city": "Lyon" }
+
+// { name: 'John', address: { city: 'Lyon' } }
+console.log(user.toJSON())
+
+await user.save();
+// Document like this will be created in DB:
+/* {
+    "_id": "f9d62b31017e03b71fb0a84a5e000a08",
+        "_rev": "1-8d43f9216da5ae302f393886daa52765",
+            "name": "John Active",
+                "address": {
+        "city": "Lyon"
+    },
+    "type": "user"
+} */
+
+
+// Define a service class using your entity
+class UserService {
+
+    constructor(UserClass) {
+        this.UserClass = UserClass;
+    }
+
+
+    async findUserByName(name) {
+        return await this.UserClass.findByName(name);
+    }
+
+    async findUserByEmailAndName(email, name) {
+        return await this.UserClass.findOne({
+            "$and": [
+                { "name": name },
+                { "email": email }
+            ]
+        }
+        )
+
+    }
+
+    async getUserById(id) {
+        // Fetch a user by ID
+        return await this.UserClass.find(id);
+    }
+
+    async deleteUser(id) {
+        // Delete a user by ID
+        return await this.UserClass.delete(id);
+    }
+}
+
+// instantiate service
+
+const myService = new UserService(User);
+
+
+const found = await myService.findUserByName("John Active");
+console.log(found.toJSON());
+/*     {
+        name: 'John Active',
+        address: { city: 'Lyon' },
+        _id: 'f9d62b31017e03b71fb0a84a5e000a08',
+        _rev: '1-8d43f9216da5ae302f393886daa52765'
+      } */
+
+```
+### 2. Choose between Data Mapper or Active Record pattern
+Instead of passing a single schema directly, you can pass multiple schemas through AJV options and reference the one you want by ID.
+```
+
+
+const { createDataMapperEntity, DataSource, createRepository } = require('nosqlax');
+
+const schema = {
+    "$id": "my-schema",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "definitions": {
+        "address": {
+            "type": "object",
+            "properties": {
+                "city": { "type": "string" }
+            }
+        }
+    },
+    "properties": {
+        "name": { "type": "string" },
+        "address": {
+            "$ref": "#/definitions/address"
+        }
+    }
+}
+
+// Datasource (connexion)
+const ds = new DataSource({
+    url: 'http://localhost:5984',
+    database: 'nosqlax-test'
+})
+
+// Create the User class using the helper
+const User = createDataMapperEntity(
+    "User",
+    "user",
+    schema,
+    {})
+
+// Instanciate a user
+const user = new User({ name: "John" });
+user.address = { "city": "Lyon" }
+
+// { name: 'John', address: { city: 'Lyon' } }
+console.log(user.toJSON())
+
+const userRepository = createRepository(
+    User,
+    ds,
+    {
+        methods: {
+            async findByName(name) {
+                return this.findOne({ name: { $eq: name } });
+            },
+            async getViewA(options) {
+                return this.dbConnection.view('design', 'view', options)
+                // you can also process view results here to return User entities
+            }
+        }
+    }
+)
+
+
+// Define a service class user your repo
+class UserService {
+    constructor(userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    async saveUser(userData) {
+        // Create a new user using the UserRepository
+        return await this.userRepository.save(userData);
+    }
+
+    async findUserByName(name) {
+        return await this.userRepository.findByName(name);
+    }
+
+    async findUserByEmailAndName(email, name) {
+        return await this.userRepository.findOne({
+            "$and": [
+                { "name": name },
+                { "email": email }
+            ]
+        }
+        )
+
+    }
+
+    async getUserById(id) {
+        // Fetch a user by ID
+        return await this.userRepository.find(id);
+    }
+
+    async deleteUser(id) {
+        // Delete a user by ID
+        return await this.userRepository.delete(id);
+    }
+}
+
+// instantiate service
+
+const myService = new UserService(userRepository);
+
+
+async function main() {
+    await myService.saveUser(user);
+    // Document like this will be created in DB:
+    /* {
+        "_id": "f9d62b31017e03b71fb0a84a5e000a08",
+            "_rev": "1-8d43f9216da5ae302f393886daa52765",
+                "name": "John",
+                    "address": {
+            "city": "Lyon"
+        },
+        "type": "user"
+    } */
+
+    const found = await myService.findUserByName("John");
+    console.log(found.toJSON());
+    /*     {
+            name: 'John',
+            address: { city: 'Lyon' },
+            _id: 'f9d62b31017e03b71fb0a84a5e000a08',
+            _rev: '1-8d43f9216da5ae302f393886daa52765'
+          } */
+}
+
+main();
+
+
+
+```
+### 3. Using AJV Options with Multiple Schemas (via schemaId)
+Instead of passing a single schema directly, you can pass multiple schemas through AJV options and reference the one you want by ID.
+```
+// schemas/index.ts
+export const ajvOptions = {
+  schemas: [
+    {
+      $id: 'https://example.com/schemas/User',
       type: 'object',
       properties: {
+        name: { type: 'string' },
         email: { type: 'string', format: 'email' },
+        address: {
+          type: 'object',
+          properties: {
+            city: { type: 'string' }
+          },
+          required: ['city']
+        }
       },
+      required: ['name', 'email']
     },
-  },
-  required: ['email', 'name'],
+    {
+      $id: 'https://example.com/schemas/Other',
+      type: 'object',
+      properties: {
+        field: { type: 'string' }
+      }
+    }
+  ]
 };
-class User extends BaseEntity {
-  static type = 'user';  
-  static schemaOrSchemaId = userSchema; 
-  static fieldMap = {
-    email: 'email',  // Entity's email field is mapped to 'email' in the document
-    name: 'name'
-    type: 'docType', // The type (here 'user', is specified by the docType property in the couchdb document
-    contactEmail: 'contact.email',  // Entity's contactEmail field is mapped to 'contact.email' in the document
-  };
 
-  constructor(data) {
-    super(data);
-    this.email = data.email;
-    this.name = data.name;
-    this.contactEmail = data.contactEmail;
-  }
-}
+import { createActiveRecordEntity } from 'nosqlax';
+import { ajvOptions } from '../schemas';
+import dataSource from '../db';
 
-module.exports = User;
-```
-### 2. Define the Repository
-Define the repository by extending `CouchRepository`. `CouchRepository` requires a nano connection, AJV options and the entity linked to this repository. By default `CouchRepository` provides basic CRUD operations based on document IDs and Mongo query selectors. But you can extend it to add your own methods to get data from CouchDB. For instance by querying views. You can access the nano connection and its methods using the `dbConnection` attribute of the CouchRepository. 
-```
-const { CouchRepository } = require('nosqlax');  // Your library
-const User = require('../entities/User');  // Import the User entity
-const dbConnection = require('../db/dbConnection');  // Import DB connection
-
-class UserRepository extends CouchRepository {
-
-  constructor(connection, options = {}) {
-    super(connection, options, User);
-  }
-
-  // Add custom repository methods here, if needed
-
-  async findByName(name) {
-    return this.findOne({ name: { $eq: name } });
-  }
-
-  async getViewA(options) {
-    return this.dbConnection.view('design', 'view', options)
-    // you can also process view results here to return User entities
-  }
-}
-
-module.exports = UserRepository;
-```
-### 3. Business Logic with Services
-Implement your business logic using the repository. Here’s an example with a `UserService` class to manage user operations.
-```
-const UserRepository = require('../repositories/UserRepository');
-
-class UserService {
-  constructor(userRepository) {
-    this.repository = userRepository  // Use the dedicated UserRepository. 
-  }
-
-  async createUser(user) {
-    try {
-      // Create a new user
-      const user = await this.repository.create(user);
-      console.log('Created user:', user);
-      return user;
-    } catch (err) {
-      console.error('Error creating user:', err);
-      throw err;
+const User = createActiveRecordEntity(
+  'User',
+  'user',
+  'https://example.com/schemas/User', // schema ID
+  dataSource,
+  {
+    ajvOptions,
+    fieldMap: {
+      name: 'name',
+      email: 'email',
+      city: 'address.city'
     }
   }
+);
 
-  async findUserById(id) {
-    try {
-      const user = await this.repository.find(id);
-      console.log('Found user:', user);
-      return user;
-    } catch (err) {
-      console.error('Error finding user:', err);
-      throw err;
-    }
-  }
-
-  async findUserByName(name) {
-    try {
-      const user = await this.repository.findByName(name)
-      console.log('Found user by name:', user);
-      return user;
-    } catch (err) {
-      console.error('Error finding user by name:', err);
-      throw err;
-    }
-  }
-}
-
-module.exports = UserService;
+const user = new User({ name: 'Jane', email: 'jane@example.com', city: 'London' });
+await user.save();
 ```
 ### 4. Relax and have fun!
-When instantiating the repository, you can pass the schema in case you defined your entity schema as a schema ID instead of the schema itself.
-```
-const UserRepository = require('../repositories/UserRepository');
-const UserService = require('./services/UserService');
-const User = require('../entities/User');  // Import the User entity
-
-async function run() {
-  const userRepository = new UserRepository(nanoConnection, {
-        schemas: [userSchema],
-        allErrors: true
-      });
-  const userService = new UserService(userRepository);
-
-  // Example: Creating a new user
-  const newUser = new User({
-    name: 'Jane Doe',
-    contactEmail: 'jane.doe@example.com',
-  });
-
-  await userService.createUser(newUser);
-
-  // Example: Searching for the user by ID
-  const userId = 'some-user-id';  // Replace with a valid ID
-  await userService.findUserById(userId);
-
-  // Example: Searching for the user by name
-  await userService.findUserByName('Jane Doe');
-}
-
-run().catch((err) => console.error(err));
-```

@@ -28,11 +28,11 @@ const ds = new DataSource({
 
 // Create the User class using the helper
 const User = createActiveRecordEntity(
-    "User",
-    "user",
-    schema,
-    ds,
-    {
+    "User", // class name
+    "user", // type
+    schema, // Schema or schema ID
+    ds, // Data source
+    { // additional query methods
 
         methods: {
             async findByName(name) {
