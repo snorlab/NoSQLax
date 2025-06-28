@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [14, 18, 23]  # Test on Node.js versions 14, 18, and 23
+        node-version: [18, 20, 24]  # Test on Node.js versions 18, 20, and 24
 
     steps:
       - name: Checkout repository
