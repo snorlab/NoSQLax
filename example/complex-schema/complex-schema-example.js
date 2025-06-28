@@ -75,36 +75,7 @@ const ds = new DataSource({
     database: 'nosqlax-test'
 })
 
-// Create the User class using the helper
-const User = createActiveRecordEntity(
-    "User",
-    "user",
-    "workflow.schema.json", // passing id of schema and passing schema in the ajvoption with dependencies
-    ds,
-    {
-        ajvOptions,
-        methods: {
-            async findByType(t) {
-                return this.findOne({ inputType: { $eq: t } });
-            },
-            async getViewA(options) {
-                return this.dbConnection.view('design', 'view', options)
-                // you can also process view results here to return User entities
-            }
-        },
-        fieldMap: {
-            type: "doctype",
-            inputType: "input.type"
-        }
 
-    })
-
-// Instanciate a user
-const user = new User({ name: "John Custom Field" });
-user.inputType = "TypeA"
-
-// { name: 'John Custom Field', inputType: 'TypeA' }
-console.log(user.toJSON())
 
 
 // Define a service class using your entity
@@ -141,12 +112,41 @@ class UserService {
     }
 }
 
-// instantiate service
 
-const myService = new UserService(User);
 
 
 async function main() {
+    // Create the User class using the helper
+    const User = await createActiveRecordEntity(
+        "User",
+        "user",
+        "workflow.schema.json", // passing id of schema and passing schema in the ajvoption with dependencies
+        ds,
+        {
+            ajvOptions,
+            methods: {
+                async findByType(t) {
+                    return this.findOne({ inputType: { $eq: t } });
+                },
+                async getViewA(options) {
+                    return this.dbConnection.view('design', 'view', options)
+                    // you can also process view results here to return User entities
+                }
+            },
+            fieldMap: {
+                type: "doctype",
+                inputType: "input.type"
+            }
+
+        })
+
+    // Instanciate a user
+    const user = new User({ name: "John Custom Field" });
+    user.inputType = "TypeA"
+
+    // { name: 'John Custom Field', inputType: 'TypeA' }
+    console.log(user.toJSON())
+
     await user.save();
     // Document like this will be created in DB:
     /* {
@@ -158,7 +158,9 @@ async function main() {
   },
   "name": "John Custom Field"
 } */
+    // instantiate service
 
+    const myService = new UserService(User);
     const found = await myService.findUserByType("TypeA");
     console.log(found.toJSON());
     /*     {

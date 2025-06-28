@@ -1,6 +1,6 @@
 {
   "name": "nosqlax",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "NoSQLax is a lightweight JavaScript library designed to simplify and streamline CRUD operations with CouchDB. NoSQLax provides a unified and intuitive repository pattern to handle your data effortlessly.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

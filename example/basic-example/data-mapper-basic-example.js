@@ -28,35 +28,7 @@ const ds = new DataSource({
     database: 'nosqlax-test'
 })
 
-// Create the User class using the helper
-const User = createDataMapperEntity(
-    "User",
-    "user",
-    schema,
-    {})
 
-// Instanciate a user
-const user = new User({ name: "John" });
-user.address = { "city": "Lyon" }
-
-// { name: 'John', address: { city: 'Lyon' } }
-console.log(user.toJSON())
-
-const userRepository = createRepository(
-    User,
-    ds,
-    {
-        methods: {
-            async findByName(name) {
-                return this.findOne({ name: { $eq: name } });
-            },
-            async getViewA(options) {
-                return this.dbConnection.view('design', 'view', options)
-                // you can also process view results here to return User entities
-            }
-        }
-    }
-)
 
 
 // Define a service class user your repo
@@ -96,12 +68,42 @@ class UserService {
     }
 }
 
-// instantiate service
-
-const myService = new UserService(userRepository);
-
 
 async function main() {
+    // Create the User class using the helper
+    const User = await createDataMapperEntity(
+        "User",
+        "user",
+        schema,
+        {})
+
+    // Instanciate a user
+    const user = new User({ name: "John" });
+    user.address = { "city": "Lyon" }
+
+    // { name: 'John', address: { city: 'Lyon' } }
+    console.log(user.toJSON())
+
+    const userRepository = createRepository(
+        User,
+        ds,
+        {
+            methods: {
+                async findByName(name) {
+                    return this.findOne({ name: { $eq: name } });
+                },
+                async getViewA(options) {
+                    return this.dbConnection.view('design', 'view', options)
+                    // you can also process view results here to return User entities
+                }
+            }
+        }
+    )
+
+    // instantiate service
+
+    const myService = new UserService(userRepository);
+
     await myService.saveUser(user);
     // Document like this will be created in DB:
     /* {

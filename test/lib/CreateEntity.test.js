@@ -11,6 +11,26 @@ describe('Entity Creation Utilities', () => {
     },
   };
 
+  const mockSchema2 = {
+    type: 'object',
+    definitions: {
+      prop: {
+        type: 'object', properties: {
+          name: { type: 'string' },
+        }
+      }
+    },
+    oneOf: [
+      {
+        properties: {
+          prop: {
+            "$ref": "#/definitions/prop"
+          }
+        }
+      }
+    ]
+  };
+
   const mockDataSource = {
     connection: {},
   };
@@ -21,11 +41,11 @@ describe('Entity Creation Utilities', () => {
   });
 
   describe('createActiveRecordEntity', () => {
-    it('should create a class extending ActiveRecordEntity with expected static props', () => {
+    it('should create a class extending ActiveRecordEntity with expected static props', async () => {
       // Mock attachDataSource
       ActiveRecordEntity.attachDataSource = jest.fn();
 
-      const CustomEntity = createActiveRecordEntity(
+      const CustomEntity = await createActiveRecordEntity(
         'UserEntity',
         'user',
         mockSchema,
@@ -55,21 +75,30 @@ describe('Entity Creation Utilities', () => {
   });
 
   describe('createDataMapperEntity', () => {
-    it('should create a class extending DataMapperEntity with correct config', () => {
-      const CustomDataMapper = createDataMapperEntity(
+    it('should create a class extending DataMapperEntity with correct config', async () => {
+      const CustomDataMapper = await createDataMapperEntity(
         'ProductEntity',
         'product',
-        mockSchema,
+        mockSchema2,
         {
-          fieldMap: { name: 'name' },
+          fieldMap: { name: 'prop.name' },
           ajvOptions: { strict: false },
         }
       );
 
+      const entity = new CustomDataMapper({name: "Test"});
+
       expect(CustomDataMapper.prototype instanceof DataMapperEntity).toBe(true);
       expect(CustomDataMapper.type).toBe('product');
-      expect(CustomDataMapper.schemaOrSchemaId).toBe(mockSchema);
-      expect(CustomDataMapper.fieldMap).toEqual({ name: 'name' });
+      expect(CustomDataMapper.schemaOrSchemaId).toBe(mockSchema2);
+      expect(CustomDataMapper.fieldMap).toEqual({ name: 'prop.name' });
+      expect(entity.name).toBe("Test")
+      
+      expect(() => {
+        entity.name = 123;
+      }).toThrow('Validation failed for "name":');
+      
+
     });
   });
 });

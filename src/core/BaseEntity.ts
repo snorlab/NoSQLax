@@ -159,7 +159,7 @@ abstract class BaseEntity implements IBaseEntity {
     this.initializeData(data);
   }
 
-  static initialize(): void {
+  static async initialize(): Promise<void> {
     if (initializedClasses.has(this)) return;
 
     const ctor = this as typeof BaseEntity;
@@ -196,7 +196,8 @@ abstract class BaseEntity implements IBaseEntity {
     // compile to dereference the schema
     const validator = ajv.compile(rawSchema);
     const resolvedSchema = validator.schema as AnySchemaObject;
-    const restructured = restructureSchemaFromFieldMap(resolvedSchema, fieldMap);
+    const dereferencedSchema = await $RefParser.dereference(rawSchema);
+    const restructured = restructureSchemaFromFieldMap(dereferencedSchema, fieldMap);
 
     const schemaProperties = restructured.properties || {};
     const schemaDefs: any = restructured.definitions;

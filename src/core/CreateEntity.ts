@@ -18,7 +18,7 @@ type EntityConfig = {
 
 
 
-function createEntityBase(
+async function createEntityBase(
   name: string,
   type: string,
   schemaOrSchemaId: string | object,
@@ -32,15 +32,15 @@ function createEntityBase(
   const DynamicEntityClass = class extends EntityClass {
     static type = type;
     static schemaOrSchemaId = schemaOrSchemaId;
-    static fieldMap = config.fieldMap;
-    static ajvOptions = config.ajvOptions;
+    static fieldMap = config.fieldMap || {};
+    static ajvOptions = config.ajvOptions || {};
 
     constructor(data: Record<string, any>) {
       super(data);
     }
 
-    static initialize(): void {
-      super.initialize();
+    static async initialize(): Promise<void> {
+      await super.initialize();
   }
 
   };
@@ -54,20 +54,20 @@ function createEntityBase(
   Object.defineProperty(DynamicEntityClass, 'name', { value: name });
 
   // Initialize schema, define accessors
-  DynamicEntityClass.initialize();
+  await DynamicEntityClass.initialize();
 
   return DynamicEntityClass as unknown;
 }
 
-export function createActiveRecordEntity(
+export async function createActiveRecordEntity(
   name: string,
   type: string,
   schemaOrSchemaId: string | object,
   dataSource: DataSource,
   config: EntityConfig
-) {
+): Promise<typeof ActiveRecordEntity> {
   // Explicitly type the EntityClass as typeof ActiveRecordEntity
-  let EntityClass = createEntityBase(name, type, schemaOrSchemaId, config, ActiveRecordEntity) as typeof ActiveRecordEntity;
+  let EntityClass = await createEntityBase(name, type, schemaOrSchemaId, config, ActiveRecordEntity) as typeof ActiveRecordEntity;
 
   // Automatically attach the dataSource with optional ajvOptions
   EntityClass['attachDataSource'](dataSource, config.ajvOptions || {});
@@ -77,14 +77,14 @@ export function createActiveRecordEntity(
 
 
 
-export function createDataMapperEntity(
+export async function createDataMapperEntity(
   name: string,
   type: string,
   schemaOrSchemaId: string | object,
   config: DataMapperEntityConfig
-) {
+): Promise<typeof DataMapperEntity> {
   // Use the shared base function for creating the class
-  const EntityClass = createEntityBase(name, type, schemaOrSchemaId, config, DataMapperEntity) as typeof DataMapperEntity;
+  const EntityClass = await createEntityBase(name, type, schemaOrSchemaId, config, DataMapperEntity) as typeof DataMapperEntity;
 
 
   return EntityClass as typeof DataMapperEntity;

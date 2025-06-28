@@ -26,32 +26,7 @@ const ds = new DataSource({
     database: 'nosqlax-test'
 })
 
-// Create the User class using the helper
-const User = createActiveRecordEntity(
-    "User", // class name
-    "user", // type
-    schema, // Schema or schema ID
-    ds, // Data source
-    { // additional query methods
 
-        methods: {
-            async findByName(name) {
-                return this.findOne({ name: { $eq: name } });
-            },
-            async getViewA(options) {
-                return this.dbConnection.view('design', 'view', options)
-                // you can also process view results here to return User entities
-            }
-        }
-
-    })
-
-// Instanciate a user
-const user = new User({ name: "John Active" });
-user.address = { "city": "Lyon" }
-
-// { name: 'John', address: { city: 'Lyon' } }
-console.log(user.toJSON())
 
 
 // Define a service class using your entity
@@ -88,12 +63,38 @@ class UserService {
     }
 }
 
-// instantiate service
 
-const myService = new UserService(User);
 
 
 async function main() {
+
+    // Create the User class using the helper
+    const User = await createActiveRecordEntity(
+        "User", // class name
+        "user", // type
+        schema, // Schema or schema ID
+        ds, // Data source
+        { // additional query methods
+
+            methods: {
+                async findByName(name) {
+                    return this.findOne({ name: { $eq: name } });
+                },
+                async getViewA(options) {
+                    return this.dbConnection.view('design', 'view', options)
+                    // you can also process view results here to return User entities
+                }
+            }
+
+        })
+
+    // Instanciate a user
+    const user = new User({ name: "John Active" });
+    user.address = { "city": "Lyon" }
+
+    // { name: 'John', address: { city: 'Lyon' } }
+    console.log(user.toJSON())
+
     await user.save();
     // Document like this will be created in DB:
     /* {
@@ -105,7 +106,9 @@ async function main() {
         },
         "type": "user"
     } */
+    // instantiate service
 
+    const myService = new UserService(User);
     const found = await myService.findUserByName("John Active");
     console.log(found.toJSON());
     /*     {
