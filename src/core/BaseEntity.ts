@@ -1,6 +1,11 @@
 
 type FieldMap = Record<string, string>;
-import $RefParser from '@apidevtools/json-schema-ref-parser';
+import $RefParser, { dereference } from '@apidevtools/json-schema-ref-parser';
+import path from 'path';
+
+import { parse, stringify } from 'flatted';
+
+
 
 interface IBaseEntity {
   id?: string;
@@ -13,6 +18,44 @@ interface IBaseEntity {
   toJSON(): Record<string, any>;
 }
 import Ajv, { ValidateFunction, ErrorObject, AnySchema, AnySchemaObject } from 'ajv';
+import { ResolverOptions, FileInfo } from '@apidevtools/json-schema-ref-parser';
+
+function createAjvResolver(ajv: Ajv): ResolverOptions {
+  return {
+    order: 2,
+    canRead: true, // Accept all refs (you can narrow with a RegExp or custom logic)
+
+    async read(file: FileInfo): Promise<string> {
+      const refPath = path.basename(file.url); // remove fragment part
+      let schema: AnySchema | undefined;
+
+      // Try full ID match
+      const fullSchemaFn = ajv.getSchema(refPath);
+      schema = fullSchemaFn?.schema as AnySchema;
+
+      // If not found, try suffix match
+      if (!schema) {
+        const allSchemas = Object.values(ajv.schemas || {});
+        for (const schemaObj of allSchemas) {
+          // `schemaObj` can be just a schema or {schema, meta, ...} depending on AJV version
+          const candidateSchema = (schemaObj as any)?.schema || (schemaObj as AnySchema);
+          const id = (candidateSchema as any)?.$id || (candidateSchema as any)?.id;
+          if (id && id.endsWith(refPath)) {
+            schema = candidateSchema;
+            break;
+          }
+        }
+      }
+
+      if (!schema) {
+        throw new Error(`Schema not found for ref: ${file.url}`);
+      }
+
+      return JSON.stringify(schema);
+    },
+  };
+}
+
 
 
 function collectAndRemoveAllSchemas(
@@ -22,6 +65,9 @@ function collectAndRemoveAllSchemas(
   results: any[]
 ): void {
   if (!schema || typeof schema !== 'object') return;
+
+  // remaining $ref only are circular refs after dereferencings
+  if (schema.$ref && typeof schema.$ref === 'string') return;
 
   // Base case: match at current level
   if (path.length === 0 && schema.properties?.[key]) {
@@ -92,7 +138,8 @@ function restructureSchemaFromFieldMap(
   schema: AnySchemaObject,
   fieldMap: Record<string, string>
 ): AnySchemaObject {
-  const cloned = JSON.parse(JSON.stringify(schema));
+
+  const cloned = parse(stringify(schema)); // safe circular clone
   const toAdd: Record<string, any> = {};
 
   // 1. Flatten all top-level combinator properties (even if not mapped)
@@ -126,7 +173,6 @@ function restructureSchemaFromFieldMap(
 
   return cloned;
 }
-
 
 // Used to avoid redefining getters/setters for the same subclass
 const initializedClasses = new WeakSet<Function>();
@@ -169,7 +215,7 @@ abstract class BaseEntity implements IBaseEntity {
     let schema: any;
 
     if (typeof ctor.schemaOrSchemaId === 'string') {
-      const validateFn = ajv.getSchema(ctor.schemaOrSchemaId);
+      const validateFn = ajv.getSchema(ctor.schemaOrSchemaId.split("#/definitions/")[0]); // we get base schema with its deifnitions for the dereferencing
       schema =
         validateFn?.schema && typeof validateFn.schema === 'object'
           ? validateFn.schema as AnySchema
@@ -194,24 +240,79 @@ abstract class BaseEntity implements IBaseEntity {
     }
 
     // compile to dereference the schema
-    const validator = ajv.compile(rawSchema);
-    const resolvedSchema = validator.schema as AnySchemaObject;
-    const dereferencedSchema = await $RefParser.dereference(rawSchema);
-    const restructured = restructureSchemaFromFieldMap(dereferencedSchema, fieldMap);
+
+
+    // 3. Dereference local $ref (like "#/definitions/...")
+    // dereference local ref from ajv schemas
+    const options = {
+      resolve: {
+        ajv: createAjvResolver(ajv),
+      },
+      dereference: {
+        circular: 'ignore'
+      }
+    } as const;
+    const dereferencedSchema2 = await $RefParser.bundle(rawSchema, options);
+
+    let restructured;
+
+    if (typeof ctor.schemaOrSchemaId === 'object') {
+      // schema passedas object so it's necessarely the whole object
+      restructured = restructureSchemaFromFieldMap(dereferencedSchema2, fieldMap);
+    }
+    else {
+      const ajv = new Ajv({ strict: false, schemas: [dereferencedSchema2] });
+
+      const validateFn = ajv.getSchema(ctor.schemaOrSchemaId);
+
+      if (!validateFn?.schema) {
+        throw new Error(`Schema not found in AJV for ID: ${ctor.schemaOrSchemaId}`);
+      }
+
+      const finalSchema = validateFn.schema;
+
+      /*       if (ctor.schemaOrSchemaId.split("#/definitions/").length > 1) {
+              (finalSchema as any).definitions = {
+                ...(finalSchema as any).definitions,
+                ...dereferencedSchema2.definitions
+              }
+            } */
+
+      // todo : get schema using $id with new ajv instance or validator or else
+      restructured = restructureSchemaFromFieldMap(finalSchema as AnySchemaObject, fieldMap);
+
+      if (ctor.schemaOrSchemaId.split("#/definitions/").length > 1) {
+        (restructured as any).definitions = {
+          ...(restructured as any).definitions,
+          ...dereferencedSchema2.definitions
+        }
+      }
+    }
 
     const schemaProperties = restructured.properties || {};
     const schemaDefs: any = restructured.definitions;
-  
+
     for (const [schemaProp, schemaDef] of Object.entries(schemaProperties)) {
       const propName = reverseMap[schemaProp] || schemaProp;
 
       // Inject definitions into subschema if needed
       if (typeof schemaDef === 'object' && schemaDefs) {
-        (schemaDef as any).definitions = schemaDefs;
+        (schemaDef as any).definitions = {
+          ...(schemaDef as any).definitions,
+          ...schemaDefs
+        }
       }
 
-      const propValidator = ajv.compile(schemaDef as object);
-  
+      // Protect _id and _rev from being overridden
+      if (propName === '_id' || propName === '_rev') {
+        continue;
+      }
+
+      const ajvProp = new Ajv({
+        strict: false
+      });
+      const propValidator = ajvProp.compile(schemaDef as object);
+
       Object.defineProperty(ctor.prototype, propName, {
         get() {
           return this.__data.get(this)?.[propName];
@@ -227,7 +328,7 @@ abstract class BaseEntity implements IBaseEntity {
               .join(', ');
             throw new Error(`Validation failed for "${propName}": ${errors}`);
           }
-  
+
           const dataStore = this.__data.get(this) || {};
           dataStore[propName] = value;
           this.__data.set(this, dataStore);
@@ -236,7 +337,7 @@ abstract class BaseEntity implements IBaseEntity {
         configurable: false
       });
     }
-  
+
     initializedClasses.add(ctor);
 
   }
