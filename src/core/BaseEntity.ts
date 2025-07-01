@@ -252,7 +252,7 @@ abstract class BaseEntity implements IBaseEntity {
         circular: 'ignore'
       }
     } as const;
-    const dereferencedSchema2 = await $RefParser.bundle(rawSchema, options);
+    const dereferencedSchema2 = await $RefParser.dereference(rawSchema, options);
 
     let restructured;
 
@@ -294,25 +294,26 @@ abstract class BaseEntity implements IBaseEntity {
 
     for (const [schemaProp, schemaDef] of Object.entries(schemaProperties)) {
       const propName = reverseMap[schemaProp] || schemaProp;
-
-      // Inject definitions into subschema if needed
-      if (typeof schemaDef === 'object' && schemaDefs) {
-        (schemaDef as any).definitions = {
-          ...(schemaDef as any).definitions,
-          ...schemaDefs
-        }
-      }
-
+    
       // Protect _id and _rev from being overridden
       if (propName === '_id' || propName === '_rev') {
         continue;
       }
-
-      const ajvProp = new Ajv({
-        strict: false
-      });
-      const propValidator = ajvProp.compile(schemaDef as object);
-
+    
+      // Clone schema and inject definitions to avoid mutation
+      const enrichedSchemaDef =
+        typeof schemaDef === 'object' && schemaDefs
+          ? {
+              ...schemaDef,
+              definitions: {
+                ...(schemaDef as any).definitions,
+                ...schemaDefs
+              }
+            }
+          : schemaDef;
+    
+      const propValidator = ajv.compile(enrichedSchemaDef as object);
+    
       Object.defineProperty(ctor.prototype, propName, {
         get() {
           return this.__data.get(this)?.[propName];
@@ -322,19 +323,20 @@ abstract class BaseEntity implements IBaseEntity {
           if (!this.validators[propName]) {
             this.validators[propName] = propValidator;
           }
+    
           if (!propValidator(value)) {
             const errors = (propValidator.errors as ErrorObject[] | null | undefined)
               ?.map(err => `${err.instancePath} ${err.message}`)
-              .join(', ');
-            throw new Error(`Validation failed for "${propName}": ${errors}`);
+              .join('\n');
+            throw new Error(`Validation failed for "${propName}":\n${errors}`);
           }
-
+    
           const dataStore = this.__data.get(this) || {};
           dataStore[propName] = value;
           this.__data.set(this, dataStore);
         },
         enumerable: true,
-        configurable: false
+        configurable: true // Allow redefinition if needed
       });
     }
 
